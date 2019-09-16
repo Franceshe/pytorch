@@ -118,7 +118,6 @@ DEFAULT_FUNCTION_REGISTRATION = CodeTemplate("""\
   .impl_unboxedOnlyCatchAllKernel<${return_type} (${formals_types}), &TypeDefault::${api_name}>()
   .aliasAnalysis(c10::AliasAnalysisKind::FROM_SCHEMA))
 """)
-
 BACKEND_FUNCTION_REGISTRATION = CodeTemplate("""\
 .op(torch::RegisterOperators::options()
   .schema("${schema_string}")
@@ -1267,11 +1266,6 @@ def create_generic(top_env, declarations, updEnv):
         c = any('TensorOptions' in arg['type'] for arg in option['arguments'])
 
         is_factory_method = a or b or c
-        if type_method_dispatch == "randn":
-            print("\n\n\n hello")
-            print("type_method_dispatch : ", type_method_dispatch)
-            print("is_factory_method : ", is_factory_method)
-            print("args: ", option['arguments'])
 
         check_methods_do_not_start_with_underscore(option['name'], is_method)
 
