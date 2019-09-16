@@ -195,28 +195,9 @@ def check_if_input_has_to(inputs):
     return any(arg['type'] == 'const TensorOptions &' for arg in inputs)
 
 def collapseTO2(args):
-    a = 'ScalarType dtype' in args and 'Layout layout' in args and 'Device device' in args and 'bool pin_memory' in args
-    b = 'at::ScalarType dtype' in args and 'at::Layout layout' in args and 'at::Device device' in args and 'bool pin_memory' in args
-    c = 'c10::optional<ScalarType> dtype' in args and 'c10::optional<Layout> layout' in args and 'c10::optional<Device> device' in args and 'c10::optional<bool> pin_memory' in args
-
-    index = -1
-    if a:
-        index = args.index('ScalarType dtype')
-
-    if b:
-        index = args.index('at::ScalarType dtype')
-
-    if c:
+    if 'c10::optional<ScalarType> dtype' in args and 'c10::optional<Layout> layout' in args and 'c10::optional<Device> device' in args and 'c10::optional<bool> pin_memory' in args:
         index = args.index('c10::optional<ScalarType> dtype')
 
-    if a:
-        print ("check_if_input_has_to A")
-    if b:
-        print ("check_if_input_has_to B")
-    if c:
-        print ("check_if_input_has_to C")
-
-    if a or b or c:
         args.pop(index + 3)
         args.pop(index + 2)
         args.pop(index + 1)
@@ -276,7 +257,6 @@ def gen_py_variable_methods(out, declarations, template_path):
     PY_VARIABLE_DISPATCH_H = CodeTemplate.from_file(template_path + '/python_variable_methods_dispatch.h')
 
     py_variable_methods = get_py_variable_methods(declarations)
-
 
     env = create_python_bindings(py_variable_methods, True)
     write(out, 'python_variable_methods.cpp', PY_VARIABLE_METHODS_CPP, env)
@@ -482,7 +462,6 @@ def create_python_bindings(python_functions, has_self, is_module=False):
 
         # We always want to unpack when we have TensorOptions.
         unpack = has_tensor_options
-
         for arg in inputs:
             if arg['simple_type'] in ['Type', 'TensorOptions']:
                 continue
@@ -561,7 +540,6 @@ def create_python_bindings(python_functions, has_self, is_module=False):
                                     "\"Device device\" are supported".format(arg)))
 
         dtype = parsed_type_args[0] if parsed_type_args else None
-
         if has_tensor_options and all([dtype, device, layout, requires_grad]):
             body.append(TENSOR_OPTIONS.substitute({
                 'dtype': dtype,
@@ -581,7 +559,6 @@ def create_python_bindings(python_functions, has_self, is_module=False):
 
         env['unpack_args'] = []
         env['formal_args'] = collapseTO2(formal_args)
-
         env['actuals'] = collapseActualsTO(actuals)
 
         if has_tensor_options:
@@ -629,7 +606,6 @@ def create_python_bindings(python_functions, has_self, is_module=False):
 
         env = nested_dict(env, nested_dict(base_env, declaration))
         call_dispatch = PY_VARIABLE_CALL_DISPATCH.substitute(env)
-
         if requires_grad and not has_tensor_options:
             call_dispatch = PY_VARIABLE_SET_REQUIRES_GRAD.substitute(env, call_dispatch=call_dispatch,
                                                                      requires_grad=requires_grad)
@@ -639,7 +615,6 @@ def create_python_bindings(python_functions, has_self, is_module=False):
         else:
             body.append(PY_VARIABLE_WRAP.substitute(env, call_dispatch=call_dispatch))
         py_method_dispatch.append(PY_VARIABLE_DISPATCH.substitute(env))
-
         return body
 
     def emit_dispatch(i, dictionary, base_env):
@@ -862,9 +837,7 @@ def group_declarations(declarations):
     # first group by signature ignoring out arguments
     for declaration in declarations:
         signature = get_python_signature(declaration, False)
-
         v = grouped[signature]
-
         if declaration['name'].endswith('_out'):
             v['out'] = declaration
             # prefer the signature with optional out=... arguments
@@ -961,7 +934,6 @@ def get_python_signature(declaration, include_out):
     # For a translation to mypy-valid type signatures, see
     # tools/gen_pyi.py.  If you change any logic here, please
     # check that file too.
-
     py_formal_args = []
     output_args = []
     type_args = []
@@ -980,14 +952,12 @@ def get_python_signature(declaration, include_out):
             typename = '{}[{}]'.format(typename, arg['size'])
         param = typename + ' ' + arg['name']
         default = None
-
         if arg.get('default') is not None:
             default = arg['default']
             if default == 'nullptr' or default == 'c10::nullopt' or default == '{}':
                 default = 'None'
         if default is not None:
             param += '=' + str(default)
-
         return param
 
     for arg in declaration['arguments']:
