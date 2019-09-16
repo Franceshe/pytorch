@@ -168,11 +168,80 @@ const auto options = TensorOptions()
     .pinned_memory(${pin_memory});
 """)
 
-def hasTO(inputs):
-    a = 'c10::optional<at::ScalarType>' in inputs and 'c10::optional<at::Layout>' in inputs and 'c10::optional<at::Device>' in inputs and 'c10::optional<bool>' in inputs
-    a1 = 'c10::optional<ScalarType> dtype' in inputs and 'c10::optional<Layout> layout' in inputs and 'c10::optional<Device> device' in inputs and 'c10::optional<bool> pin_memory' in inputs
-    b = 'ScalarType' in inputs and 'Layout' in inputs and 'Device' in inputs and 'bool' in inputs
-    return a or a1 or b
+def collapseTraceTO(args):
+    a = any(arg['type'] == 'c10::optional<ScalarType>' for arg in args) and any(arg['type'] == 'c10::optional<Layout>' for arg in args) and any(arg['type'] == 'c10::optional<Device>' for arg in args) and any(arg['type'] == 'c10::optional<bool>' for arg in args)
+    b = any(arg['type'] == 'ScalarType' for arg in args) and any(arg['type'] == 'Layout' for arg in args) and any(arg['type'] == 'Device' for arg in args) and any(arg['type'] == 'bool' for arg in args)
+
+    if a or b:
+        index = 0
+        for i in range(len(args)):
+            if args[i]['type'] == 'ScalarType' or args[i]['type'] == 'c10::optional<ScalarType>':
+                break
+            index += 1
+
+        args.insert(index + 4, {"annotation" : "None", "dynamic_type": "TensorOptions", "is_nullable": "False", "kwarg_only": "True", "name": "options", "type": "const TensorOptions &", "simple_type": "TensorOptions"})
+
+        args.pop(index + 3)
+        args.pop(index + 2)
+        args.pop(index + 1)
+        args.pop(index)
+
+    return args
+
+def isTO(args):
+    return any(arg['type'] == 'c10::optional<ScalarType>' for arg in args) and any(arg['type'] == 'c10::optional<Layout>' for arg in args) and any(arg['type'] == 'c10::optional<Device>' for arg in args) and any(arg['type'] == 'c10::optional<bool>' for arg in args)
+
+def check_if_input_has_to(inputs):
+    return any(arg['type'] == 'const TensorOptions &' for arg in inputs)
+
+def collapseTO2(args):
+    a = 'ScalarType dtype' in args and 'Layout layout' in args and 'Device device' in args and 'bool pin_memory' in args
+    b = 'at::ScalarType dtype' in args and 'at::Layout layout' in args and 'at::Device device' in args and 'bool pin_memory' in args
+    c = 'c10::optional<ScalarType> dtype' in args and 'c10::optional<Layout> layout' in args and 'c10::optional<Device> device' in args and 'c10::optional<bool> pin_memory' in args
+
+    index = -1
+    if a:
+        index = args.index('ScalarType dtype')
+
+    if b:
+        index = args.index('at::ScalarType dtype')
+
+    if c:
+        index = args.index('c10::optional<ScalarType> dtype')
+
+    if a:
+        print ("check_if_input_has_to A")
+    if b:
+        print ("check_if_input_has_to B")
+    if c:
+        print ("check_if_input_has_to C")
+
+    if a or b or c:
+        args.pop(index + 3)
+        args.pop(index + 2)
+        args.pop(index + 1)
+        args.pop(index)
+
+        args.append('const TensorOptions & options')
+    return args
+
+def collapseActualsTO(actuals):
+    if 'dtype' in actuals and \
+       'layout' in actuals and \
+       'device' in actuals and \
+       'pin_memory' in actuals:
+       index = actuals.index('dtype')
+       
+       if index != -1:
+           actuals.pop(index + 3)
+           actuals.pop(index + 2)
+           actuals.pop(index + 1)
+           actuals.pop(index)
+           
+           if 'options' not in actuals:
+               actuals.insert(index, 'options')
+
+    return actuals
 
 def should_generate_python_binding(declaration):
     name = declaration['name']
@@ -187,7 +256,6 @@ def should_generate_python_binding(declaration):
             return False
 
     return True
-
 
 def get_py_variable_methods(declarations):
     """
@@ -345,12 +413,7 @@ def create_python_bindings(python_functions, has_self, is_module=False):
         inputs = [arg for arg in declaration['arguments'] if not is_output(arg)]
         outputs = [arg for arg in declaration['arguments'] if is_output(arg)]
 
-        a = any(arg['type'] == 'c10::optional<at::ScalarType>' for arg in inputs) and any(arg['type'] == 'c10::optional<at::Layout>' for arg in inputs) and any(arg['type'] == 'c10::optional<at::Device>' for arg in inputs) and any(arg['type'] == 'c10::optional<bool>' for arg in inputs)
-        a1 = any(arg['type'] == 'c10::optional<ScalarType>' for arg in inputs) and any(arg['type'] == 'c10::optional<Layout>' for arg in inputs) and any(arg['type'] == 'c10::optional<Device>' for arg in inputs) and any(arg['type'] == 'c10::optional<bool>' for arg in inputs)
-        b = any(arg['type'] == 'ScalarType' for arg in inputs) and any(arg['type'] == 'Layout' for arg in inputs) and any(arg['type'] == 'Device' for arg in inputs) and any(arg['type'] == 'bool' for arg in inputs)
-        c = any(arg['type'] == 'const TensorOptions &' for arg in inputs)
-
-        has_tensor_options = a or a1 or b or c
+        has_tensor_options = check_if_input_has_to(inputs) 
 
         def get_type_args(args):
             return [arg for arg in args if arg['simple_type'] == 'Type']
@@ -412,27 +475,6 @@ def create_python_bindings(python_functions, has_self, is_module=False):
                 dispatch_type = 'c10::optional<int32_t>'
             formal = '{} {}'.format(dispatch_type, name)
             return expr, formal
-
-        def fix_c10_type(type):
-            if type == "c10::optional<ScalarType> dtype":
-                return "c10::optional<at::ScalarType> dtype"
-
-            if type == "c10::optional<Layout> layout":
-                return "c10::optional<at::Layout> layout"
-
-            if type == "c10::optional<Device> device":
-                return "c10::optional<at::Device> device"
-
-            if type == "Device device":
-                return "at::Device device"
-
-            if type == "Layout layout":
-                return "at::Layout layout"
-
-            if type == "ScalarType dtype":
-                return "at::ScalarType dtype"
-
-            return type
 
         def append_actuals_formals(actual, formal):
             actuals.append(actual)
@@ -529,56 +571,13 @@ def create_python_bindings(python_functions, has_self, is_module=False):
                 'pin_memory': pin_memory,
             }))
 
-            if not hasTO(formal_args):
-                formal_args.append('const TensorOptions & options')
+            formal_args.append('const TensorOptions & options')
         elif has_tensor_options:
-            if not hasTO(formal_args):
-                formal_args.append('const TensorOptions & options')
+            formal_args.append('const TensorOptions & options')
 
         if has_tensor_options:
             if 'options' not in actuals:
                 actuals.append('options')
-
-        def collapseTO2(args):
-            a = 'ScalarType dtype' in args and 'Layout layout' in args and 'Device device' in args and 'bool pin_memory' in args
-            b = 'at::ScalarType dtype' in args and 'at::Layout layout' in args and 'at::Device device' in args and 'bool pin_memory' in args
-            c = 'c10::optional<ScalarType> dtype' in args and 'c10::optional<Layout> layout' in args and 'c10::optional<Device> device' in args and 'c10::optional<bool> pin_memory' in args
-
-            index = -1
-            if a:
-                index = args.index('ScalarType dtype')
-
-            if b:
-                index = args.index('at::ScalarType dtype')
-
-            if c:
-                index = args.index('c10::optional<ScalarType> dtype')
-
-            if a or b or c:
-                args.pop(index + 3)
-                args.pop(index + 2)
-                args.pop(index + 1)
-                args.pop(index)
-
-                args.append('const TensorOptions & options')
-            return args
-
-        def collapseActualsTO(actuals):
-            if 'dtype' in actuals and \
-               'layout' in actuals and \
-               'device' in actuals and \
-               'pin_memory' in actuals:
-               index = actuals.index('dtype')
-               if index != -1:
-                   actuals.pop(index + 3)
-                   actuals.pop(index + 2)
-                   actuals.pop(index + 1)
-                   actuals.pop(index)
-
-                   if 'options' not in actuals:
-                       actuals.insert(index, 'options')
-
-            return actuals
 
         env['unpack_args'] = []
         env['formal_args'] = collapseTO2(formal_args)
@@ -949,39 +948,8 @@ def sort_declarations(grouped_decls):
 
     return [decl for i, decl in sorted_deps]
 
-def collapseTraceTO(args):
-    a = any(arg['type'] == 'c10::optional<at::ScalarType>' for arg in args) and any(arg['type'] == 'c10::optional<at::Layout>' for arg in args) and any(arg['type'] == 'c10::optional<at::Device>' for arg in args) and any(arg['type'] == 'c10::optional<bool>' for arg in args)
-    a1 = any(arg['type'] == 'c10::optional<ScalarType>' for arg in args) and any(arg['type'] == 'c10::optional<Layout>' for arg in args) and any(arg['type'] == 'c10::optional<Device>' for arg in args) and any(arg['type'] == 'c10::optional<bool>' for arg in args)
-    b = any(arg['type'] == 'ScalarType' for arg in args) and any(arg['type'] == 'Layout' for arg in args) and any(arg['type'] == 'Device' for arg in args) and any(arg['type'] == 'bool' for arg in args)
-
-    if a or a1 or b:
-        index = 0
-        for i in range(len(args)):
-            if args[i]['type'] == 'ScalarType' or args[i]['type'] == 'c10::optional<ScalarType>':
-                break
-            index += 1
-
-        args.insert(index + 4, {"annotation" : "None", "dynamic_type": "TensorOptions", "is_nullable": "False", "kwarg_only": "True", "name": "options", "type": "const TensorOptions &", "simple_type": "TensorOptions"})
-
-        args.pop(index + 3)
-        args.pop(index + 2)
-        args.pop(index + 1)
-        args.pop(index)
-
-    return args
-
-def isTO(args):
-    return any(arg['type'] == 'c10::optional<ScalarType>' for arg in args) and any(arg['type'] == 'c10::optional<Layout>' for arg in args) and any(arg['type'] == 'c10::optional<Device>' for arg in args) and any(arg['type'] == 'c10::optional<bool>' for arg in args)
-
 def get_python_signature(declaration, include_out):
-    foo = declaration['name'] == 'cumprod'
-
-    if foo:
-        print("\n\n before: ", declaration['arguments'])
     declaration['arguments'] = collapseTraceTO(declaration['arguments'])
-
-    if foo:
-        print("\n\n after: ", declaration['arguments'])
 
     # Compute the Python function signature for argument parsing,
     # as specified in torch/csrc/utils/python_arg_parser.h.  WARNING:
@@ -1045,10 +1013,6 @@ def get_python_signature(declaration, include_out):
             positional = False
         param = get_py_formal_arg(arg)
         py_formal_args.append(param)
-
-    if foo:
-        print("\n\n py_formal_args: ", py_formal_args)
-        print("\n\n isTO: ", isTO(declaration['arguments']))
 
     # add output arguments
     name = declaration['name']
