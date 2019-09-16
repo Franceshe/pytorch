@@ -735,7 +735,7 @@ def to_return_type(arg, option):
     }
 
 
-def create_generic(top_env, declarations, updEnv):
+def create_generic(top_env, declarations, update_top_env):
     # type: (TopEnvironment, List[FunctionOption]) -> List[OutputDeclaration]
     # translates defaults from cwrap types to C++ values
     def translate_default(argument, type_str, default):
@@ -1280,7 +1280,7 @@ def create_generic(top_env, declarations, updEnv):
             raise Exception("broadcasting is not yet supported for native functions, "
                             "but specified for function {}", option['name'])
 
-        if updEnv:
+        if update_top_env:
             if BUILD_NAMEDTENSOR or not is_named_tensor_only:
                 top_env['registration_declarations'].append(
                     REGISTRATION_DECLARATION.substitute(option))
@@ -1305,7 +1305,7 @@ def create_generic(top_env, declarations, updEnv):
         abstract = False
         if isinstance(type_method_dispatch, dict):
             abstract = True
-        elif updEnv:
+        elif update_top_env:
             top_env['type_method_declarations'].append(
                 check_namedtensor_enabled(NATIVE_DISPATCH_DECLARATION.substitute(option)))
             top_env['type_method_definitions'].append(
@@ -1324,11 +1324,11 @@ def create_generic(top_env, declarations, updEnv):
                 if value not in generated_native_functions:
                     option['native_type_method_dispatch'] = value
                     
-                    if updEnv:
+                    if update_top_env:
                         top_env['native_function_declarations'].append(
                             check_namedtensor_enabled(NATIVE_DECLARATION.substitute(option)))
                     generated_native_functions.append(value)
-        elif updEnv:
+        elif update_top_env:
             top_env['native_function_declarations'].append(
                 check_namedtensor_enabled(NATIVE_DECLARATION.substitute(option)))
 
@@ -1338,7 +1338,7 @@ def create_generic(top_env, declarations, updEnv):
             if is_named_tensor_only:
                 code = add_namedtensor_enabled_macro(code)
             
-            if updEnv:
+            if update_top_env:
                 top_env['tensor_method_declarations'].append(code.declaration)
                 top_env['tensor_method_definitions'].append(code.definition)
             method_of.append('Tensor')
@@ -1348,7 +1348,7 @@ def create_generic(top_env, declarations, updEnv):
             if is_named_tensor_only:
                 code = add_namedtensor_enabled_macro(code)
             
-            if updEnv:
+            if update_top_env:
                 top_env['function_definitions'].append(code.definition)
                 top_env['function_declarations'].append(code.declaration)
             method_of.append('namespace')
@@ -1398,6 +1398,7 @@ def create_generic(top_env, declarations, updEnv):
         output_declarations.extend(output_options)
 
     return output_declarations
+
 
 def create_derived(backend_type_env, declarations):
     # type: (Environment, List[FunctionOption]) -> Tuple[List[str], List[str], List[str], List[str], List[str]]
