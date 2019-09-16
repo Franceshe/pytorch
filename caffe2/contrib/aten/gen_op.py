@@ -192,23 +192,13 @@ def get_num_inputs(o):
             args += 1
     return str(args)
 
-
 def find_factory_methods(decls):
-    factory_methods = {}
-    for o in decls:
-        if any(arg['dynamic_type'] == 'TensorOptions' for arg in o['arguments']):
-            factory_methods[o['name']] = 0
-    return factory_methods
-
-def find_factory_methods2(decls):
     factory_methods = {}
     for o in decls:
         a = any(arg['type'] == 'c10::optional<ScalarType>' for arg in o['arguments']) and any(arg['type'] == 'c10::optional<Layout>' for arg in o['arguments']) and any(arg['type'] == 'c10::optional<Device>' for arg in o['arguments']) and any(arg['type'] == 'c10::optional<bool>' for arg in o['arguments'])
         b = any(arg['type'] == 'ScalarType' for arg in o['arguments']) and any(arg['type'] == 'Layout' for arg in o['arguments']) and any(arg['type'] == 'Device' for arg in o['arguments']) and any(arg['type'] == 'bool' for arg in o['arguments'])
-        a1 = any(arg['type'] == 'c10::optional<at::ScalarType>' for arg in o['arguments']) and any(arg['type'] == 'c10::optional<at::Layout>' for arg in o['arguments']) and any(arg['type'] == 'c10::optional<at::Device>' for arg in o['arguments']) and any(arg['type'] == 'c10::optional<bool>' for arg in o['arguments'])
-        b1 = any(arg['type'] == 'at::ScalarType' for arg in o['arguments']) and any(arg['type'] == 'at::Layout' for arg in o['arguments']) and any(arg['type'] == 'at::Device' for arg in o['arguments']) and any(arg['type'] == 'bool' for arg in o['arguments'])
-
-        if (a or a1 or b1 or b):
+        
+        if (a or b):
             factory_methods[o['name']] = 0
     return factory_methods
 
@@ -223,10 +213,7 @@ def emit_assignments(o, env):
 
 if __name__ == '__main__':
     decls = yaml.load(read(os.path.join(args.yaml_dir, 'Declarations.yaml')), Loader=Loader)
-    factory_methods = find_factory_methods2(decls)
-
-    print("\n\nFACTORY STUFF: ", factory_methods)
-
+    factory_methods = find_factory_methods(decls)
     filtered = [expanded for o in decls for expanded in expand(o) if supports(expanded, factory_methods)]
     top_env = {
         'mappings': [],
