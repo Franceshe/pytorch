@@ -692,6 +692,10 @@ def dispatch_scalar_type(option, dispatch_options, dispatch_tensor):
         return 'auto dispatch_scalar_type = infer_scalar_type({});'.format(dispatch_tensor)
     return '// dispatch_scalar_type omitted'
 
+def check_if_factory_method(args):
+    a = any(arg['type'] == 'c10::optional<ScalarType>' for arg in args) and any(arg['type'] == 'c10::optional<Layout>' for arg in args) and any(arg['type'] == 'c10::optional<Device>' for arg in args) and any(arg['type'] == 'c10::optional<bool>' for arg in args)
+    b = any('TensorOptions' in arg['type'] for arg in args)
+    return a or b
 
 def is_real_argument_to_wrapper(argument):
     # type: (THFormal) -> bool
@@ -1261,11 +1265,7 @@ def create_generic(top_env, declarations, updEnv):
         if is_method and not is_namespace_function:
             assert formals[0]['name'] == 'self'
 
-        a = any(arg['type'] == 'c10::optional<ScalarType>' for arg in option['arguments']) and any(arg['type'] == 'c10::optional<Layout>' for arg in option['arguments']) and any(arg['type'] == 'c10::optional<Device>' for arg in option['arguments']) and any(arg['type'] == 'c10::optional<bool>' for arg in option['arguments'])
-        b = any(arg['type'] == 'c10::optional<at::ScalarType>' for arg in option['arguments']) and any(arg['type'] == 'c10::optional<at::Layout>' for arg in option['arguments']) and any(arg['type'] == 'c10::optional<at::Device>' for arg in option['arguments']) and any(arg['type'] == 'c10::optional<bool>' for arg in option['arguments'])
-        c = any('TensorOptions' in arg['type'] for arg in option['arguments'])
-
-        is_factory_method = a or b or c
+        is_factory_method = check_if_factory_method(option['arguments'])
 
         check_methods_do_not_start_with_underscore(option['name'], is_method)
 
