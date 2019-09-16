@@ -1,7 +1,6 @@
 
 import argparse
 import os
-import pdb
 import yaml
 from collections import OrderedDict
 
@@ -280,9 +279,7 @@ def generate_storage_type_and_tensor(backend, density, declarations):
     declarations, definitions, registrations, th_declarations, th_definitions = function_wrapper.create_derived(
         env, declarations)
     env['type_derived_method_declarations'] = declarations
-
     env['type_derived_method_definitions'] = definitions
-
     env['function_registrations'] = registrations
     env['legacy_th_declarations'] = th_declarations
     env['legacy_th_definitions'] = th_definitions
@@ -412,8 +409,7 @@ def generate_outputs():
     declarations += native_parse.run(native_files, False)
     declarations = preprocess_declarations.run(declarations)
 
-
-    foo = function_wrapper.create_generic2(declarations)
+    foo = function_wrapper.create_generic(top_env, declarations, False)
     foo = postprocess_output_declarations(foo)
     file_manager.write("Declarations.yaml", format_yaml(foo))
 
@@ -428,8 +424,7 @@ def generate_outputs():
     # note: this will fill in top_env['type/tensor_method_declarations/definitions']
     # and modify the declarations to include any information that will all_backends
     # be used by function_wrapper.create_derived
-
-    output_declarations = function_wrapper.create_generic(top_env, declarations)
+    output_declarations = function_wrapper.create_generic(top_env, declarations, True)
     output_declarations = postprocess_output_declarations(output_declarations)
 
     # Filter out named-tensor only declarations.
