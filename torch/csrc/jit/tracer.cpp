@@ -145,6 +145,7 @@ Value* TracingState::getValue(const IValue& var) {
       }
       return it->second;
     }
+    std::ostringstream oss;
     if (var.isFuture()) {
       oss << "Tried to trace Future or Object that the tracer was not aware of.";
     } else {
