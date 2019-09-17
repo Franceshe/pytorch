@@ -151,10 +151,6 @@ const auto options = TensorOptions()
 #endif
 """)
 
-CALL_NAMESPACE_WITH_TENSOR_OPTIONS2 = CodeTemplate("""\
-auto result_ = torch::${name}(${args_with_tensor_options});
-""")
-
 CALL_METHOD_WITH_TENSOR_OPTIONS = CodeTemplate("""\
 const auto options = TensorOptions()
         .dtype(${dtype})
@@ -252,23 +248,25 @@ def is_out_variant(decl):
 def argument_order(decl):
     return decl.get('jit_argument_order') or list(range(len(decl['arguments'])))
 
+
+def getTOIndex(decl2):
+    if all(arg.get('type') for arg in decl2['arguments']):
+        a = any(arg['type'] == 'c10::optional<ScalarType>' for arg in decl2['arguments']) and any(arg['type'] == 'c10::optional<Layout>' for arg in decl2['arguments']) and any(arg['type'] == 'c10::optional<Device>' for arg in decl2['arguments']) and any(arg['type'] == 'c10::optional<bool>' for arg in decl2['arguments'])
+        b = any(arg['type'] == 'ScalarType' for arg in decl2['arguments']) and any(arg['type'] == 'Layout' for arg in decl2['arguments']) and any(arg['type'] == 'Device' for arg in decl2['arguments']) and any(arg['type'] == 'bool' for arg in decl2['arguments'])
+        
+        if a or b:
+            i = 0
+            for i in range(len(decl2['arguments'])):
+                if decl2['arguments'][i]['simple_type'] == 'ScalarType?' or decl2['arguments'][i]['simple_type'] == 'ScalarType':
+                    return i
+                i += 1
+    
+    return None
+
 def gen_jit_dispatch(declarations, out, template_path):
     REGISTER_ATEN_OPS_CPP = CodeTemplate.from_file(template_path + '/register_aten_ops.cpp')
 
     ops = []
-
-    def getTOIndes(decl2):
-        if all(arg.get('type') for arg in decl['arguments']):
-            a = any(arg['type'] == 'c10::optional<ScalarType>' for arg in decl2['arguments']) and any(arg['type'] == 'c10::optional<Layout>' for arg in decl2['arguments']) and any(arg['type'] == 'c10::optional<Device>' for arg in decl2['arguments']) and any(arg['type'] == 'c10::optional<bool>' for arg in decl2['arguments'])
-            b = any(arg['type'] == 'ScalarType' for arg in decl2['arguments']) and any(arg['type'] == 'Layout' for arg in decl2['arguments']) and any(arg['type'] == 'Device' for arg in decl2['arguments']) and any(arg['type'] == 'bool' for arg in decl2['arguments'])
-            if a or b:
-                i = 0
-                for i in range(len(decl2['arguments'])):
-                    if decl2['arguments'][i]['simple_type'] == 'ScalarType?' or decl2['arguments'][i]['simple_type'] == 'ScalarType':
-                        return i
-                    i += 1
-
-        return None
 
     def get_invocation(decl, args, num_inputs):
         # because the arg list can get lengthy we put them on a separate line
@@ -276,7 +274,7 @@ def gen_jit_dispatch(declarations, out, template_path):
             return ',\n'.join(args)
 
         is_namespace_function = 'namespace' in decl['method_of']
-        tensor_options_arg_index = getTOIndes(decl)
+        tensor_options_arg_index = getTOIndex(decl)
 
         if tensor_options_arg_index is not None:
             dtype = args[tensor_options_arg_index]
@@ -285,7 +283,6 @@ def gen_jit_dispatch(declarations, out, template_path):
             pin_memory = args[tensor_options_arg_index + 3]
             args_with_tensor_options = args[:tensor_options_arg_index] + \
                 ['options'] + args[(tensor_options_arg_index + 4):]
-
             if is_namespace_function:
                 return CALL_NAMESPACE_WITH_TENSOR_OPTIONS.substitute(
                     name=decl['name'], dtype=dtype, layout=layout,
@@ -322,9 +319,6 @@ def gen_jit_dispatch(declarations, out, template_path):
         num_inputs = len(decl['arguments'])
         op_capture = ''
         order = argument_order(decl)
-
-
-
         for i, arg in enumerate(decl['arguments']):
             value = from_ivalue(arg, '(std::move(peek(stack, {}, {})))'.format(order[i], num_inputs))
             if requires_lvalue(arg):
