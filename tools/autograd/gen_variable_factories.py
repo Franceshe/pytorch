@@ -3,6 +3,7 @@
 # This writes one file: variable_factories.h
 
 import re
+
 from .utils import CodeTemplate, write
 from .gen_variable_type import format_trace
 
